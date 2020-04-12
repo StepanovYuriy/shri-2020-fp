@@ -15,37 +15,79 @@
  * Ответ будет приходить в поле {result}
  */
 import Api from '../tools/api';
+import { __, allPass, andThen, gte, ifElse, length, lte, otherwise, pipe, prop, tap, test } from 'ramda';
 
 const api = new Api();
 
+// Функции валидации строк
+const lengthLessThan10 = pipe(length, lte(__, 10));
+const lengthGreaterThan2 = pipe(length, gte(__, 2));
+const hasOnlyDigitsAndDot = test(/^(\d+\.)?\d+$/);
+
+const stringIsValid = allPass([lengthLessThan10, lengthGreaterThan2, hasOnlyDigitsAndDot]);
+
+// Функции преобразования чисел
+const stringToNumber = (string) => Number(string);
+const roundNumber = (number) => Math.round(number);
+const squaringNumber = (number) => Math.pow(number, 2);
+const mod3 = (number) => number % 3;
+
+// API
+const convertFromDecimalToBinary = (number) => api.get('https://api.tech/numbers/base', { number, from: 10, to: 2 });
+const getAnimalByNumber = (number) => api.get(`https://animals.tech/${number}`, {});
+
 /**
- * Я – пример, удали меня
+ * 1. Берем строку N. Пишем изначальную строку в writeLog
+ * 2. Строка валидируется по следующим правилам:
+ *    - кол-во символов в числе должно быть меньше 10
+ *    - кол-во символов в числе должно быть больше 2
+ *    - число должно быть положительным
+ *    - символы в строке только [0-9] и точка т.е. число в 10-ной системе счисления (возможно с плавающей запятой)
+ * В случае ошибки валидации вызвать handleError с 'ValidationError' строкой в качестве аргумента
+ * 3. Привести строку к числу, округлить к ближайшему целому с точностью до единицы, записать в writeLog
+ * 4. C помощью API /numbers/base перевести из 10-й системы счисления в двоичную, результат записать в writeLog
+ * 5. Взять кол-во символов в полученном от API числе записать в writeLog
+ * 6. Возвести в квадрат с помощью Javascript записать в writeLog
+ * 7. Взять остаток от деления на 3, записать в writeLog
+ * 8. C помощью API /animals.tech/id/name получить случайное животное используя полученный остаток в качестве id
+ * 9. Завершить цепочку вызовом handleSuccess в который в качестве аргумента положить результат полученный на предыдущем шаге
  */
-const wait = time => new Promise(resolve => {
-    setTimeout(resolve, time);
-})
+const processSequence = ({ value, writeLog, handleSuccess, handleError }) => {
+    const stopProcessOnStep2 = () => handleError('ValidationError');
 
-const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
-    /**
-     * Я – пример, удали меня
-     */
-    writeLog(value);
+    const doStep8 = pipe(
+        getAnimalByNumber,
+        andThen(pipe(
+            prop('result'),
+            tap(writeLog),
+            handleSuccess,
+        )),
+        otherwise(handleError),
+    );
 
-    api.get('https://api.tech/numbers/base', {from: 2, to: 10, number: '01011010101'}).then(({result}) => {
-        writeLog(result);
-    });
+    const doStep7 = pipe(mod3, tap(writeLog), doStep8);
 
-    wait(2500).then(() => {
-        writeLog('SecondLog')
+    const doStep6 = pipe(squaringNumber, tap(writeLog), doStep7);
 
-        return wait(1500);
-    }).then(() => {
-        writeLog('ThirdLog');
+    const doStep5 = pipe(length, tap(writeLog), doStep6);
 
-        return wait(400);
-    }).then(() => {
-        handleSuccess('Done');
-    });
-}
+    const doStep4 = pipe(
+        convertFromDecimalToBinary,
+        andThen(pipe(
+            prop('result'),
+            tap(writeLog),
+            doStep5,
+        )),
+        otherwise(handleError),
+    );
+
+    const doStep3 = pipe(stringToNumber, roundNumber, doStep4);
+
+    const doStep2 = ifElse(stringIsValid, doStep3, stopProcessOnStep2);
+
+    const doStep1 = pipe(tap(writeLog), doStep2);
+
+    return doStep1(value);
+};
 
 export default processSequence;
